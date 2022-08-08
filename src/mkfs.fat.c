@@ -777,11 +777,6 @@ static void setup_tables(void)
 	    (long long)(blocks * BLOCK_SIZE / sector_size) + orphaned_sectors;
     }
 
-    if (align_structures) {
-        /* Align number of sectors to be multiple of sectors per track, needed by DOS and mtools */
-        num_sectors = num_sectors / le16toh(bs.secs_track) * le16toh(bs.secs_track);
-    }
-
     if (!atari_format) {
 	unsigned fatdata1216;	/* Sectors for FATs + data area (FAT12/16) */
 	unsigned fatdata32;	/* Sectors for FATs + data area (FAT32) */
