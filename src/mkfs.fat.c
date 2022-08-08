@@ -819,7 +819,7 @@ static void setup_tables(void)
 
 	    /* The factor 2 below avoids cut-off errors for nr_fats == 1.
 	     * The "nr_fats*3" is for the reserved first two FAT entries */
-	    clust12 = 2 * ((long long)fatdata1216 * sector_size + nr_fats * 3) /
+	    clust12 = 2 * ((long long)fatdata1216 * sector_size - nr_fats * 3) /
 		(2 * (int)bs.cluster_size * sector_size + nr_fats * 3);
 	    fatlength12 = cdiv(((clust12 + 2) * 3 + 1) >> 1, sector_size);
 	    fatlength12 = align_object(fatlength12, bs.cluster_size);
@@ -839,7 +839,7 @@ static void setup_tables(void)
 		    printf("Trying FAT12: too much clusters\n");
 	    }
 
-	    clust16 = ((long long)fatdata1216 * sector_size + nr_fats * 4) /
+	    clust16 = ((long long)fatdata1216 * sector_size - nr_fats * 4) /
 		((int)bs.cluster_size * sector_size + nr_fats * 2);
 	    fatlength16 = cdiv((clust16 + 2) * 2, sector_size);
 	    fatlength16 = align_object(fatlength16, bs.cluster_size);
@@ -866,7 +866,7 @@ static void setup_tables(void)
 		clust16 = 0;
 	    }
 
-	    clust32 = ((long long)fatdata32 * sector_size + nr_fats * 8) /
+	    clust32 = ((long long)fatdata32 * sector_size - nr_fats * 8) /
 		((int)bs.cluster_size * sector_size + nr_fats * 4);
 	    fatlength32 = cdiv((clust32 + 2) * 4, sector_size);
 	    fatlength32 = align_object(fatlength32, bs.cluster_size);
