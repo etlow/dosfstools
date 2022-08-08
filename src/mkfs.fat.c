@@ -786,17 +786,6 @@ static void setup_tables(void)
 	int maxclustsize;
 	unsigned root_dir_sectors = cdiv(root_dir_entries * 32, sector_size);
 
-	/*
-	 * If the filesystem is 8192 sectors or less (4 MB with 512-byte
-	 * sectors, i.e. floppy size), don't align the data structures.
-	 */
-	if (num_sectors <= 8192) {
-	    if (align_structures && verbose >= 2)
-		printf("Disabling alignment due to tiny filesystem\n");
-
-	    align_structures = FALSE;
-	}
-
 	if (sectors_per_cluster)
 	    bs.cluster_size = maxclustsize = sectors_per_cluster;
 	else
