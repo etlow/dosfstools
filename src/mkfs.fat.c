@@ -778,13 +778,14 @@ static void setup_tables(void)
     }
 
     if (!atari_format) {
-	unsigned fatdata1216;	/* Sectors for FATs + data area (FAT12/16) */
-	unsigned fatdata32;	/* Sectors for FATs + data area (FAT32) */
 	unsigned fatlength12, fatlength16, fatlength32;
 	unsigned maxclust12, maxclust16, maxclust32;
 	unsigned clust12, clust16, clust32;
 	int maxclustsize;
 	unsigned root_dir_sectors = cdiv(root_dir_entries * 32, sector_size);
+	/* Length of FATs + data area in bytes (FAT12/16/32, before alignment) */
+	unsigned long long fatdata_bytes = sector_size *
+	    (num_sectors - reserved_sectors - root_dir_sectors);
 
 	if (sectors_per_cluster)
 	    bs.cluster_size = maxclustsize = sectors_per_cluster;
@@ -795,24 +796,22 @@ static void setup_tables(void)
 	do {
 #define ALIGNED_DATA(fat_length) (num_sectors - align_object(\
 	reserved_sectors + nr_fats * fat_length + root_dir_sectors, bs.cluster_size))
-	    fatdata32 = fatdata1216 = num_sectors - reserved_sectors - root_dir_sectors;
-
+	    long cluster_bytes = bs.cluster_size * sector_size;
 	    if (verbose >= 2)
 		printf("Trying with %d sectors/cluster:\n", bs.cluster_size);
 
 	    /* The factor 2 below avoids cut-off errors for nr_fats == 1.
 	     * The "nr_fats*3" is for the reserved first two FAT entries */
-	    clust12 = 2 * ((long long)fatdata1216 * sector_size - nr_fats * 3) /
-		(2 * (int)bs.cluster_size * sector_size + nr_fats * 3);
+	    clust12 = 2 * (fatdata_bytes - nr_fats * 3) / (2 * cluster_bytes + nr_fats * 3);
 	    /* FAT length before alignment */
-	    fatlength12 = cdiv(((clust12 + 2) * 3 + 1) >> 1, sector_size);
+	    fatlength12 = cdiv((clust12 + 2) * 3, 2 * sector_size);
 	    /* Need to recalculate number of clusters, since the unused parts of the
 	     * FATS and data area together could make up space for an additional,
 	     * not really present cluster. */
 	    clust12 = ALIGNED_DATA(fatlength12) / bs.cluster_size;
 	    /* Reduced FAT length after alignment */
-	    fatlength12 = cdiv(((clust12 + 2) * 3 + 1) >> 1, sector_size);
-	    maxclust12 = (fatlength12 * 2 * sector_size) / 3;
+	    fatlength12 = cdiv((clust12 + 2) * 3, 2 * sector_size);
+	    maxclust12 = fatlength12 * sector_size * 2 / 3;
 	    if (maxclust12 > MAX_CLUST_12)
 		maxclust12 = MAX_CLUST_12;
 	    if (verbose >= 2 && (size_fat == 0 || size_fat == 12))
@@ -824,15 +823,14 @@ static void setup_tables(void)
 		    printf("Trying FAT12: too much clusters\n");
 	    }
 
-	    clust16 = ((long long)fatdata1216 * sector_size - nr_fats * 4) /
-		((int)bs.cluster_size * sector_size + nr_fats * 2);
+	    clust16 = (fatdata_bytes - nr_fats * 4) / (cluster_bytes + nr_fats * 2);
 	    fatlength16 = cdiv((clust16 + 2) * 2, sector_size);
 	    /* Need to recalculate number of clusters, since the unused parts of the
 	     * FATS and data area together could make up space for an additional,
 	     * not really present cluster. */
 	    clust16 = ALIGNED_DATA(fatlength16) / bs.cluster_size;
 	    fatlength16 = cdiv((clust16 + 2) * 2, sector_size);
-	    maxclust16 = (fatlength16 * sector_size) / 2;
+	    maxclust16 = fatlength16 * sector_size / 2;
 	    if (maxclust16 > MAX_CLUST_16)
 		maxclust16 = MAX_CLUST_16;
 	    if (verbose >= 2 && (size_fat == 0 || size_fat == 16))
@@ -851,15 +849,14 @@ static void setup_tables(void)
 		clust16 = 0;
 	    }
 
-	    clust32 = ((long long)fatdata32 * sector_size - nr_fats * 8) /
-		((int)bs.cluster_size * sector_size + nr_fats * 4);
+	    clust32 = (fatdata_bytes - nr_fats * 8) / (cluster_bytes + nr_fats * 4);
 	    fatlength32 = cdiv((clust32 + 2) * 4, sector_size);
 	    /* Need to recalculate number of clusters, since the unused parts of the
 	     * FATS and data area together could make up space for an additional,
 	     * not really present cluster. */
 	    clust32 = ALIGNED_DATA(fatlength32) / bs.cluster_size;
 	    fatlength32 = cdiv((clust32 + 2) * 4, sector_size);
-	    maxclust32 = (fatlength32 * sector_size) / 4;
+	    maxclust32 = fatlength32 * sector_size / 4;
 	    if (maxclust32 > MAX_CLUST_32)
 		maxclust32 = MAX_CLUST_32;
 	    if (verbose >= 2 && (size_fat == 0 || size_fat == 32))
