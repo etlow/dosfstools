@@ -809,10 +809,9 @@ static void setup_tables(void)
 	    maxclustsize = 128;
 
 	do {
-	    fatdata32 = num_sectors
-		- align_object(reserved_sectors, bs.cluster_size);
-	    fatdata1216 = fatdata32
-		- align_object(root_dir_sectors, bs.cluster_size);
+#define ALIGNED_DATA(fat_length) (num_sectors - align_object(\
+	reserved_sectors + nr_fats * fat_length + root_dir_sectors, bs.cluster_size))
+	    fatdata32 = fatdata1216 = num_sectors - reserved_sectors - root_dir_sectors;
 
 	    if (verbose >= 2)
 		printf("Trying with %d sectors/cluster:\n", bs.cluster_size);
@@ -821,12 +820,14 @@ static void setup_tables(void)
 	     * The "nr_fats*3" is for the reserved first two FAT entries */
 	    clust12 = 2 * ((long long)fatdata1216 * sector_size - nr_fats * 3) /
 		(2 * (int)bs.cluster_size * sector_size + nr_fats * 3);
+	    /* FAT length before alignment */
 	    fatlength12 = cdiv(((clust12 + 2) * 3 + 1) >> 1, sector_size);
-	    fatlength12 = align_object(fatlength12, bs.cluster_size);
 	    /* Need to recalculate number of clusters, since the unused parts of the
 	     * FATS and data area together could make up space for an additional,
 	     * not really present cluster. */
-	    clust12 = (fatdata1216 - nr_fats * fatlength12) / bs.cluster_size;
+	    clust12 = ALIGNED_DATA(fatlength12) / bs.cluster_size;
+	    /* Reduced FAT length after alignment */
+	    fatlength12 = cdiv(((clust12 + 2) * 3 + 1) >> 1, sector_size);
 	    maxclust12 = (fatlength12 * 2 * sector_size) / 3;
 	    if (maxclust12 > MAX_CLUST_12)
 		maxclust12 = MAX_CLUST_12;
@@ -842,11 +843,11 @@ static void setup_tables(void)
 	    clust16 = ((long long)fatdata1216 * sector_size - nr_fats * 4) /
 		((int)bs.cluster_size * sector_size + nr_fats * 2);
 	    fatlength16 = cdiv((clust16 + 2) * 2, sector_size);
-	    fatlength16 = align_object(fatlength16, bs.cluster_size);
 	    /* Need to recalculate number of clusters, since the unused parts of the
 	     * FATS and data area together could make up space for an additional,
 	     * not really present cluster. */
-	    clust16 = (fatdata1216 - nr_fats * fatlength16) / bs.cluster_size;
+	    clust16 = ALIGNED_DATA(fatlength16) / bs.cluster_size;
+	    fatlength16 = cdiv((clust16 + 2) * 2, sector_size);
 	    maxclust16 = (fatlength16 * sector_size) / 2;
 	    if (maxclust16 > MAX_CLUST_16)
 		maxclust16 = MAX_CLUST_16;
@@ -869,11 +870,11 @@ static void setup_tables(void)
 	    clust32 = ((long long)fatdata32 * sector_size - nr_fats * 8) /
 		((int)bs.cluster_size * sector_size + nr_fats * 4);
 	    fatlength32 = cdiv((clust32 + 2) * 4, sector_size);
-	    fatlength32 = align_object(fatlength32, bs.cluster_size);
 	    /* Need to recalculate number of clusters, since the unused parts of the
 	     * FATS and data area together could make up space for an additional,
 	     * not really present cluster. */
-	    clust32 = (fatdata32 - nr_fats * fatlength32) / bs.cluster_size;
+	    clust32 = ALIGNED_DATA(fatlength32) / bs.cluster_size;
+	    fatlength32 = cdiv((clust32 + 2) * 4, sector_size);
 	    maxclust32 = (fatlength32 * sector_size) / 4;
 	    if (maxclust32 > MAX_CLUST_32)
 		maxclust32 = MAX_CLUST_32;
@@ -941,14 +942,10 @@ static void setup_tables(void)
 	}
 
 	/* Adjust the reserved number of sectors for alignment */
-	reserved_sectors = align_object(reserved_sectors, bs.cluster_size);
+	reserved_sectors = align_object(
+		reserved_sectors + nr_fats * fat_length + root_dir_sectors,
+		bs.cluster_size) - nr_fats * fat_length - root_dir_sectors;
 	bs.reserved = htole16(reserved_sectors);
-
-	/* Adjust the number of root directory entries to help enforce alignment */
-	if (align_structures) {
-	    root_dir_entries = align_object(root_dir_sectors, bs.cluster_size)
-		* (sector_size >> 5);
-	}
     } else {
 	unsigned clusters, maxclust, fatdata;
 
