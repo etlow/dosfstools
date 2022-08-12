@@ -1,3 +1,11 @@
+## Plus/minus testing code
+
+This code only tests the difference between plus and minus for multiple device sizes as stated in GitHub issue <https://github.com/dosfstools/dosfstools/issues/125>. It should not actually format any file.
+
+It can be built normally with the instructions below up to `make` and then `src/mkfs.fat -C file.img 1` run as normal. The range of sizes tested can be updated by modifying the for loop near the bottom of `mkfs.fat.c`.
+
+## dosfstools readme
+
 dosfstools consists of the programs mkfs.fat, fsck.fat and fatlabel to create,
 check and label file systems of the FAT family.  The dosfstools are licensed
 under the GNU GPL version 3 or later. See the file `COPYING` for details.
