@@ -278,6 +278,8 @@ static int invariant = 0;		/* Whether to set normally randomized or
 					   constants */
 static int fill_mbr_partition = -1;	/* Whether to fill MBR partition table or not */
 
+static int plus; /* Whether currently testing plus or minus */
+
 /* Function prototype definitions */
 
 static void mark_FAT_cluster(int cluster, unsigned int value);
@@ -829,8 +831,13 @@ static void setup_tables(void)
 
 	    /* The factor 2 below avoids cut-off errors for nr_fats == 1.
 	     * The "nr_fats*3" is for the reserved first two FAT entries */
-	    clust12 = 2 * ((long long)fatdata1216 * sector_size + nr_fats * 3) /
-		(2 * (int)bs.cluster_size * sector_size + nr_fats * 3);
+	    if (plus) {
+		clust12 = 2 * ((long long)fatdata1216 * sector_size + nr_fats * 3) /
+		    (2 * (int)bs.cluster_size * sector_size + nr_fats * 3);
+	    } else {
+		clust12 = 2 * ((long long)fatdata1216 * sector_size - nr_fats * 3) /
+		    (2 * (int)bs.cluster_size * sector_size + nr_fats * 3);
+	    }
 	    fatlength12 = cdiv(((clust12 + 2) * 3 + 1) >> 1, sector_size);
 	    fatlength12 = align_object(fatlength12, bs.cluster_size);
 	    /* Need to recalculate number of clusters, since the unused parts of the
@@ -849,8 +856,13 @@ static void setup_tables(void)
 		    printf("Trying FAT12: too much clusters\n");
 	    }
 
-	    clust16 = ((long long)fatdata1216 * sector_size + nr_fats * 4) /
-		((int)bs.cluster_size * sector_size + nr_fats * 2);
+	    if (plus) {
+		clust16 = ((long long)fatdata1216 * sector_size + nr_fats * 4) /
+		    ((int)bs.cluster_size * sector_size + nr_fats * 2);
+	    } else {
+		clust16 = ((long long)fatdata1216 * sector_size - nr_fats * 4) /
+		    ((int)bs.cluster_size * sector_size + nr_fats * 2);
+	    }
 	    fatlength16 = cdiv((clust16 + 2) * 2, sector_size);
 	    fatlength16 = align_object(fatlength16, bs.cluster_size);
 	    /* Need to recalculate number of clusters, since the unused parts of the
@@ -876,8 +888,13 @@ static void setup_tables(void)
 		clust16 = 0;
 	    }
 
-	    clust32 = ((long long)fatdata32 * sector_size + nr_fats * 8) /
-		((int)bs.cluster_size * sector_size + nr_fats * 4);
+	    if (plus) {
+		clust32 = ((long long)fatdata32 * sector_size + nr_fats * 8) /
+		    ((int)bs.cluster_size * sector_size + nr_fats * 4);
+	    } else {
+		clust32 = ((long long)fatdata32 * sector_size - nr_fats * 8) /
+		    ((int)bs.cluster_size * sector_size + nr_fats * 4);
+	    }
 	    fatlength32 = cdiv((clust32 + 2) * 4, sector_size);
 	    fatlength32 = align_object(fatlength32, bs.cluster_size);
 	    /* Need to recalculate number of clusters, since the unused parts of the
@@ -1247,6 +1264,9 @@ static void setup_tables(void)
 	    printf("no volume label.\n");
     }
 
+    // Early return as this is a test, no need to malloc
+    return;
+
     /* Make the file allocation tables! */
 
     if (malloc_entire_fat)
@@ -1418,6 +1438,35 @@ static void write_tables(void)
     free(info_sector_buffer);
     free(root_dir);		/* Free up the root directory space from setup_tables */
     free(fat);			/* Free up the fat table space reserved during setup_tables */
+}
+
+struct params {
+    int root_dir_entries;
+    uint16_t secs_track;
+    uint16_t heads;
+    int reserved_sectors;
+    int align_structures;
+    int size_fat;
+};
+
+static void backup_params(struct params *par)
+{
+    par->root_dir_entries = root_dir_entries;
+    par->secs_track = bs.secs_track;
+    par->heads = bs.heads;
+    par->reserved_sectors = reserved_sectors;
+    par->align_structures = align_structures;
+    par->size_fat = size_fat;
+}
+
+static void restore_params(struct params *par)
+{
+    root_dir_entries = par->root_dir_entries;
+    bs.secs_track = par->secs_track;
+    bs.heads = par->heads;
+    reserved_sectors = par->reserved_sectors;
+    align_structures = par->align_structures;
+    size_fat = par->size_fat;
 }
 
 /* Report the command usage and exit with the given error code */
@@ -1952,10 +2001,34 @@ int main(int argc, char **argv)
             fill_mbr_partition = 0;
     }
 
-    establish_params(&devinfo);
-    /* Establish the media parameters */
+    /* Test code */
+    struct params par;
+    backup_params(&par);
+    for (unsigned long long test_blocks = 64; test_blocks < 12000000; test_blocks += 16) {
+        devinfo.size = test_blocks * BLOCK_SIZE;
+        blocks = (devinfo.size - part_sector * sector_size) / BLOCK_SIZE;
+        orphaned_sectors = ((devinfo.size - part_sector * sector_size) % BLOCK_SIZE) / sector_size;
 
-    setup_tables();		/* Establish the filesystem tables */
+        plus = TRUE;
+        establish_params(&devinfo);
+        setup_tables(); /* Sets align_structures so params must be restored */
+
+        restore_params(&par);
+        unsigned plus_fat = fat_entries;
+
+        plus = FALSE;
+        establish_params(&devinfo);
+        setup_tables();
+
+        if (plus_fat != fat_entries) {
+            printf("%llu blocks: FAT%d, clusters: + %u, - %u\n",
+                    blocks, size_fat, plus_fat - 2, fat_entries - 2);
+        }
+        restore_params(&par);
+    }
+    printf("last blocks value tested: %llu\n", blocks);
+
+    exit(0);
 
     if (check)			/* Determine any bad block locations and mark them */
 	check_blocks();
